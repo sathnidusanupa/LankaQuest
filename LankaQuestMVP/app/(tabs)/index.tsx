@@ -1,98 +1,114 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import * as Location from 'expo-location';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function App() {
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [status, setStatus] = useState("LOCKED 🔒");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-export default function HomeScreen() {
+  // --- TARGET LOCATION SETTINGS ---
+  // Methana Ube current location ekata langa thanaka coordinates danna.
+  // Example: IIT Campus (Wellawatte)
+  const TARGET_LAT = 6.8743;
+  const TARGET_LONG = 79.8606;
+  const UNLOCK_RADIUS = 50; // Meters
+
+  useEffect(() => {
+    (async () => {
+      // 1. Permission Illanna
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setErrorMsg('Permission to access location was denied');
+        return;
+      }
+
+      // 2. Real-time Location Track Karanna
+      await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 5, // Every 5 meters update
+        },
+        (newLocation) => {
+          setLocation(newLocation);
+
+          // Calculate Distance
+          const dist = getDistanceFromLatLonInMeters(
+            newLocation.coords.latitude,
+            newLocation.coords.longitude,
+            TARGET_LAT,
+            TARGET_LONG
+          );
+
+          setDistance(dist);
+
+          // 3. LOGIC: User 50m athulata awada?
+          if (dist < UNLOCK_RADIUS) {
+            setStatus("UNLOCKED! 🎉 Welcome to IIT");
+          } else {
+            setStatus("LOCKED 🔒 (Walk Closer)");
+          }
+        }
+      );
+    })();
+  }, []);
+
+  // --- MATHEMATICS (HAVERSINE FORMULA) ---
+  function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371e3; // Earth radius in meters
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c; // Distance in meters
+    return d;
+  }
+
+  function deg2rad(deg: number) {
+    return deg * (Math.PI / 180);
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={styles.container}>
+      <Text style={styles.title}>LANKA QUEST MVP</Text>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {location ? (
+        <>
+          <Text style={styles.text}>
+            Target Distance: {distance ? distance.toFixed(2) : '...'} meters
+          </Text>
+
+          <Text style={[styles.status, { color: distance && distance < UNLOCK_RADIUS ? 'green' : 'red' }]}>
+            {status}
+          </Text>
+
+          <Text style={styles.smallText}>
+            Current: {location.coords.latitude.toFixed(4)}, {location.coords.longitude.toFixed(4)}
+          </Text>
+        </>
+      ) : (
+        <ActivityIndicator size="large" color="#0000ff" />
+      )}
+
+      <Text style={styles.error}>{errorMsg}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
+  text: { fontSize: 18, marginBottom: 10 },
+  status: { fontSize: 22, fontWeight: 'bold', marginTop: 20, textAlign: 'center' },
+  smallText: { fontSize: 12, color: 'gray', marginTop: 30 },
+  error: { color: 'red', marginTop: 10 },
 });
